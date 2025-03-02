@@ -1,45 +1,34 @@
-const Apify = require('apify');
+{
+  "browserLog": false,
+  "closeCookieModals": false,
+  "debugLog": false,
+  "downloadCss": true,
+  "downloadMedia": true,
+  "excludes": [
+    {
+      "glob": "/**/*.{png,jpg,jpeg,pdf}"
+    }
+  ],
+  "headless": true,
+  "ignoreCorsAndCsp": false,
+  "ignoreSslErrors": false,
+  "keepUrlFragments": false,
+  "linkSelector": "a",
+  "pageFunction": "(async function(context) { const { page } = context; await page.waitForSelector('.product-tile-price .primary', { timeout: 10000 }); const products = await page.$$eval('.product-tile', function(tiles) { return tiles.map(function(tile) { const titleEl = tile.querySelector('.product-title-container .title a'); const priceEl = tile.querySelector('.product-tile-price .primary'); const discountEl = tile.querySelector('.product-tile-promo-info .html-content span'); return { title: titleEl ? titleEl.innerText.trim() : null, price: priceEl ? priceEl.innerText.trim() : null, discount: discountEl ? discountEl.innerText.trim() : null }; }); }); return products; })",
+  "postNavigationHooks": "// We need to return array of (possibly async) functions here.\\n// The functions accept a single argument: the \"crawlingContext\" object.\\n[\\n    async (crawlingContext) => {\\n        const { page } = crawlingContext;\\n        // ...\\n    },\\n]",
+  "preNavigationHooks": "// We need to return array of (possibly async) functions here.\\n// The functions accept two arguments: the \"crawlingContext\" object\\n// and \"gotoOptions\".\\n[\\n    async (crawlingContext, gotoOptions) => {\\n        const { page } = crawlingContext;\\n        // ...\\n    },\\n]",
+  "proxyConfiguration": {
+    "useApifyProxy": true
+  },
+  "startUrls": [
+    {
+      "url": "https://www.woolworths.com.au/shop/search/products?searchTerm=Tim+Tam",
+      "method": "GET"
+    }
+  ],
+  "useChrome": false,
+  "waitUntil": [
+    "networkidle2"
+  ]
+}
 
-Apify.main(async () => {
-    // Open a request queue and add the search URL for your specific product.
-    const requestQueue = await Apify.openRequestQueue();
-    await requestQueue.addRequest({ 
-        url: 'https://www.woolworths.com.au/shop/search/products?searchTerm=Tim+Tam' 
-    });
-
-    // Set up the Puppeteer Crawler 
-    const crawler = new Apify.PuppeteerCrawler({
-        requestQueue,
-        handlePageFunction: async ({ request, page }) => {
-            console.log(`Processing ${request.url}...`);
-
-            // Wait for product tiles to load; adjust the selector and timeout as needed
-            await page.waitForSelector('.product-tile-price .primary', { timeout: 10000 });
-
-            // Evaluate the page to extract product details
-            const products = await page.$$eval('.product-tile', (tiles) => {
-                return tiles.map(tile => {
-                    const titleEl = tile.querySelector('.product-title-container .title a');
-                    const priceEl = tile.querySelector('.product-tile-price .primary');
-                    const discountEl = tile.querySelector('.product-tile-promo-info .html-content span');
-
-                    return {
-                        title: titleEl ? titleEl.innerText.trim() : null,
-                        price: priceEl ? priceEl.innerText.trim() : null,
-                        discount: discountEl ? discountEl.innerText.trim() : null,
-                    };
-                });
-            });
-            
-            console.log('Extracted Products:', products);
-            // Push the extracted data to the default dataset
-            await Apify.pushData(products);
-        },
-        handleFailedRequestFunction: async ({ request }) => {
-            console.log(`Request ${request.url} failed too many times.`);
-        },
-    });
-
-    // Run the crawler
-    await crawler.run();
-});
