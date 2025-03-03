@@ -1,0 +1,85 @@
+const Apify = require('apify');
+
+Apify.main(async () => {
+    const { startUrls, maxItems } = await Apify.getInput();
+
+    const crawler = new Apify.PuppeteerCrawler({
+        requestQueue: await Apify.openRequestQueue(),
+        launchContext: {
+            launchOptions: {
+                headless: true, // Set to false if you want to see the browser
+            },
+        },
+        maxRequestsPerCrawl: maxItems || undefined, // Optional: limit the number of items scraped
+        handlePageFunction: async ({ page, request }) => {
+
+            // Paste the JSON configuration from above HERE inside of a variable.
+            const pageFunction = async ({ page, request }) => {
+                const data = await page.evaluate(() => {
+                  const productTiles = Array.from(document.querySelectorAll('.product-tile-body'));
+
+                  return productTiles.map(tile => {
+                    let price = null;
+                    try {
+                      price = tile.querySelector('.product-tile-price .primary').textContent.trim();
+                    } catch (e) {
+                      price = null; // Or handle the error as needed, e.g., log it.
+                    }
+
+                    let promotion = null;  // Initialize promotion outside the try block
+                    try {
+                      const promotionElement = tile.querySelector('.product-tile-promo-info .html-content a span');
+                      if (promotionElement) {
+                          promotion = promotionElement.textContent.trim();
+                      }
+                    } catch (e) {
+                      // Handle cases where the element might not be found
+                      promotion = null;  // Or handle the error as needed, e.g., log it.\
+                    }
+
+                    const titleElement = tile.querySelector('.title a');
+                    const title = titleElement ? titleElement.textContent.trim() : null;  // Handle null case
+                    const linkElement = tile.querySelector('.product-tile-image a');
+                    const link = linkElement ? linkElement.href : null;  //Handle null case
+
+                    const imageElement = tile.querySelector('.product-tile-image a img');
+                    const image = imageElement ? imageElement.src : null; //Handle null case
+
+
+                    return {
+                      title,
+                      price,
+                      promotion,
+                      url: link,
+                      imgUrl: image,
+                      requestUrl: request.url,
+                    };
+                  });
+                });
+
+                return data;
+              };
+
+            const extractedData = await pageFunction({ page, request });
+
+            if (extractedData && Array.isArray(extractedData)) {
+                for (const item of extractedData) {
+                    await Apify.pushData(item);
+                }
+            }
+        },
+        handleFailedRequestFunction: async ({ request }) => {
+            console.log(`Request ${request.url} failed.`);
+        },
+    });
+
+    // Add the start URLs to the queue
+    for (const url of startUrls) {
+        await crawler.requestQueue.addRequest({ url });
+    }
+
+    // Run the crawler
+    await crawler.run();
+
+    console.log('Crawler finished.');
+});
