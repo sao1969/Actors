@@ -12,3 +12,6 @@ document.querySelectorAll("a[href*='/product/']").forEach((el, index) =>
 
 ## Example of a Selector JSON code where the product links are unrelated but all reference a Div call Product ##
 "linkSelector": ".products a[href*='/product/'], a.page-numbers, a.next"
+
+## Example of JSON code that looks to see if there is pagination and the number of pages and if the page use the selector a.page-numbers##
+document.querySelectorAll("a.page-numbers, a.next")
