@@ -1,0 +1,14 @@
+## Console Code to find all the A ref for potential product links on a page ##
+document.querySelectorAll("a[href*='/product/']")
+
+## Console Code to print out succ references:##
+document.querySelectorAll("a[href*='/product/']").forEach((el, index) => 
+{
+  console.log(index, el.href, el.innerText.trim());
+});
+
+## Example of a Selector JSON code where the product page from the A Ref is a valid product page ##
+"linkSelector": "a[href*='/product/'], a.page-numbers, a.next"
+
+## Example of a Selector JSON code where the product links are unrelated but all reference a Div call Product ##
+"linkSelector": ".products a[href*='/product/'], a.page-numbers, a.next"
