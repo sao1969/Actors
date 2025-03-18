@@ -1,0 +1,62 @@
+## This is the JSON code to program an Apify Actor that is scraping a Wordpress Site with Woocommerce build on Elementor.
+The GLOBS have been determined based on page heirarchy and the selectors from console queries with code outlined in this repository.
+Note the max requests per crawl has been increased to 100 to cover the level of pagination in the site ##
+
+{
+    "breakpointLocation": "NONE",
+    "browserLog": true,
+    "closeCookieModals": true,
+    "debugLog": true,
+    "downloadCss": true,
+    "downloadMedia": false,
+    "excludes": [
+        {
+            "glob": ""
+        }
+    ],
+    "globs": [
+        {
+            "glob": "https://theaustralianfoodshop.com/product/*"
+        },
+        {
+            "glob": "https://theaustralianfoodshop.com/shop/page/*"
+        },
+        {
+            "glob": "https://theaustralianfoodshop.com/product-category/*"
+        },
+        {
+            "glob": "https://theaustralianfoodshop.com/*-delivered-worldwide/"
+        }
+    ],
+    "headless": false,
+    "ignoreCorsAndCsp": true,
+    "ignoreSslErrors": true,
+    "injectJQuery": true,
+    "keepUrlFragments": false,
+    "linkSelector": "a[href*='/product/'], a[href*='/product-category/'], a.page-numbers, a.next",
+    "maxConcurrency": 3,
+    "maxCrawlingDepth": 5,
+    "maxRequestRetries": 3,
+    "maxRequestsPerCrawl": 100,
+    "pageFunction": "async function pageFunction(context) {\n    const { request, log, jQuery: $ } = context;\n    const url = request.url;\n    log.info('Page opened', { url });\n\n    // Wait for key elements based on the page type\n    try {\n        if (url.includes('/product/')) {\n            await context.page.waitForSelector('.product_title.entry-title', { timeout: 10000 });\n        } else if (url.includes('/shop/') || url.includes('/product-category/')) {\n            await context.page.waitForSelector('.products', { timeout: 10000 });\n        } else {\n            await context.page.waitForSelector('title', { timeout: 10000 });\n        }\n    } catch (e) {\n        log.warning('Timeout waiting for a key selector', { error: e });\n    }\n\n    // Process product pages\n    if (url.includes('/product/')) {\n        log.info('Processing product page', { url });\n        const data = {\n            url,\n            title: $('.product_title.entry-title').text().trim(),\n            price: $('.price .woocommerce-Price-amount.amount').first().text().trim(),\n            description: $('.woocommerce-product-details__short-description p').text().trim(),\n            stockStatus: $('.stock').text().trim(),\n            brand: $('.yith-wcbr-brands [itemprop=\"brand\"] a').text().trim(),\n            categories: [],\n            images: [],\n            attributes: {},\n            lastScraped: new Date().toISOString()\n        };\n\n        // Get categories\n        $('.posted_in a').each(function() {\n            data.categories.push($(this).text().trim());\n        });\n\n        // Get images\n        $('.woocommerce-product-gallery__image img').each(function() {\n            const imgSrc = $(this).attr('src') || $(this).attr('data-src') || $(this).attr('data-large_image');\n            if (imgSrc) data.images.push(imgSrc);\n        });\n\n        // Get product attributes with error handling\n        $('.woocommerce-product-attributes tr').each(function() {\n            try {\n                const attrName = $(this).find('th').text().trim();\n                const attrValue = $(this).find('td').text().trim();\n                if (attrName && attrValue) {\n                    data.attributes[attrName] = attrValue;\n                }\n            } catch (e) {\n                log.error('Error extracting attribute', { error: e });\n            }\n        });\n\n        return data;\n    }\n\n    // Process category/shop/landing pages\n    if (url.includes('/shop/') || url.includes('/product-category/') || url.includes('-delivered-worldwide')) {\n        log.info('On category or landing page, finding product links...');\n        const productLinks = [];\n        $('a[href*=\"/product/\"]').each(function() {\n            const productUrl = $(this).attr('href');\n            if (productUrl) {\n                productLinks.push(productUrl);\n                log.info('Found product link', { productUrl });\n                context.enqueueRequest({ url: productUrl });\n            }\n        });\n\n        log.info(`Found ${productLinks.length} product links on page`);\n        const paginationLinks = [];\n        $('.woocommerce-pagination .page-numbers').each(function() {\n            const pageUrl = $(this).attr('href');\n            if (pageUrl && !pageUrl.includes('prev') && !$(this).hasClass('current')) {\n                paginationLinks.push(pageUrl);\n                log.info('Found pagination link', { pageUrl });\n                context.enqueueRequest({ url: pageUrl });\n            }\n        });\n\n        log.info(`Found ${paginationLinks.length} pagination links on page`);\n        return {\n            url: url,\n            pageType: 'category',\n            title: $('h1').first().text().trim() || $('title').first().text().trim(),\n            productsFound: productLinks.length,\n            paginationLinksFound: paginationLinks.length\n        };\n    }\n\n    // Fallback for other pages\n    return {\n        url: url,\n        pageType: 'other',\n        title: $('title').first().text().trim()\n    };\n}",
+    "postNavigationHooks": "[\n    async (crawlingContext) => {\n        try {\n            await crawlingContext.page.evaluate(() => {\n                const cookieButtons = Array.from(document.querySelectorAll('button, a, div')).filter(el => {\n                    const text = el.textContent.toLowerCase();\n                    return text.includes('accept') || text.includes('agree') || text.includes('cookie') || text.includes('consent');\n                });\n                if (cookieButtons.length > 0) cookieButtons[0].click();\n            });\n            await new Promise(resolve => setTimeout(resolve, 1000));\n        } catch (e) {\n            console.log('No cookie consent button found or error clicking it', e);\n        }\n    }\n]",
+    "preNavigationHooks": "[\n    async (crawlingContext, gotoOptions) => {\n        await crawlingContext.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');\n        await crawlingContext.page.setExtraHTTPHeaders({\n            'Accept-Language': 'en-US,en;q=0.9',\n            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',\n            'Referer': 'https://www.google.com/'\n        });\n        gotoOptions.timeout = 90000;\n        gotoOptions.waitUntil = 'domcontentloaded';\n    }\n]",
+    "proxyConfiguration": {
+        "useApifyProxy": true,
+        "groups": [
+            "RESIDENTIAL"
+        ]
+    },
+    "requestTimeoutSecs": 120,
+    "runMode": "DEVELOPMENT",
+    "startUrls": [
+        {
+            "url": "https://theaustralianfoodshop.com/",
+            "method": "GET"
+        }
+    ],
+    "useChrome": true,
+    "waitUntil": [
+        "domcontentloaded"
+    ]
+}
